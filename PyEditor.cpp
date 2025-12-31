@@ -3,10 +3,12 @@
 #include "ConfigManager.h"
 
 #include <QApplication>
+#include <QColor>
 #include <QDebug>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QFont>
 #include <QKeyEvent>
 #include <QPainter>
 #include <QPlainTextEdit>
@@ -14,6 +16,173 @@
 #include <QTextBlock>
 #include <QTextStream>
 #include <QTimer>
+
+// Python语法高亮器类
+class PythonHighlighter : public QSyntaxHighlighter
+{
+public:
+    explicit PythonHighlighter(QTextDocument* parent = nullptr)
+        : QSyntaxHighlighter(parent)
+    {
+        setupHighlightingRules();
+    }
+
+protected:
+    void highlightBlock(const QString& text) override
+    {
+        // 应用所有高亮规则
+        for (const HighlightingRule& rule : m_highlightingRules) {
+            QRegularExpressionMatchIterator matchIterator = rule.pattern.globalMatch(text);
+            while (matchIterator.hasNext()) {
+                QRegularExpressionMatch match = matchIterator.next();
+                setFormat(match.capturedStart(), match.capturedLength(), rule.format);
+            }
+        }
+
+        // 处理多行字符串
+        setCurrentBlockState(0);
+        processMultiLineStrings(text);
+
+        // 处理单行注释
+        processSingleLineComments(text);
+    }
+
+private:
+    // 高亮规则结构体
+    struct HighlightingRule
+    {
+        QRegularExpression pattern;
+        QTextCharFormat    format;
+    };
+
+    // 设置高亮规则
+    void setupHighlightingRules()
+    {
+        // 关键字
+        QStringList keywordPatterns = {
+            QStringLiteral("def"),    QStringLiteral("class"),   QStringLiteral("import"),
+            QStringLiteral("from"),   QStringLiteral("if"),      QStringLiteral("elif"),
+            QStringLiteral("else"),   QStringLiteral("while"),   QStringLiteral("for"),
+            QStringLiteral("return"), QStringLiteral("break"),   QStringLiteral("continue"),
+            QStringLiteral("pass"),   QStringLiteral("raise"),   QStringLiteral("try"),
+            QStringLiteral("except"), QStringLiteral("finally"), QStringLiteral("with"),
+            QStringLiteral("as"),     QStringLiteral("global"),  QStringLiteral("nonlocal"),
+            QStringLiteral("True"),   QStringLiteral("False"),   QStringLiteral("None"),
+            QStringLiteral("and"),    QStringLiteral("or"),      QStringLiteral("not"),
+            QStringLiteral("in"),     QStringLiteral("is"),      QStringLiteral("lambda")};
+
+        QTextCharFormat keywordFormat;
+        keywordFormat.setForeground(QColor(127, 0, 85));
+        keywordFormat.setFontWeight(QFont::Bold);
+
+        for (const QString& pattern : keywordPatterns) {
+            HighlightingRule rule;
+            rule.pattern = QRegularExpression(QStringLiteral("\\b%1\\b").arg(pattern));
+            rule.format  = keywordFormat;
+            m_highlightingRules.append(rule);
+        }
+
+        // 内置函数
+        QStringList builtinFunctions = {
+            QStringLiteral("print"),    QStringLiteral("input"),  QStringLiteral("len"),
+            QStringLiteral("type"),     QStringLiteral("int"),    QStringLiteral("float"),
+            QStringLiteral("str"),      QStringLiteral("list"),   QStringLiteral("tuple"),
+            QStringLiteral("dict"),     QStringLiteral("set"),    QStringLiteral("range"),
+            QStringLiteral("abs"),      QStringLiteral("max"),    QStringLiteral("min"),
+            QStringLiteral("sum"),      QStringLiteral("sorted"), QStringLiteral("enumerate"),
+            QStringLiteral("zip"),      QStringLiteral("map"),    QStringLiteral("filter"),
+            QStringLiteral("reversed"), QStringLiteral("any"),    QStringLiteral("all"),
+            QStringLiteral("open"),     QStringLiteral("os"),     QStringLiteral("math")};
+
+        QTextCharFormat builtinFunctionFormat;
+        builtinFunctionFormat.setForeground(QColor(0, 0, 255));
+        builtinFunctionFormat.setFontWeight(QFont::Bold);
+
+        for (const QString& pattern : builtinFunctions) {
+            HighlightingRule rule;
+            rule.pattern = QRegularExpression(QStringLiteral("\\b%1\\b").arg(pattern));
+            rule.format  = builtinFunctionFormat;
+            m_highlightingRules.append(rule);
+        }
+
+        // 字符串
+        QTextCharFormat stringFormat;
+        stringFormat.setForeground(QColor(0, 128, 0));
+
+        // 匹配单引号和双引号字符串
+        HighlightingRule stringRule1;
+        stringRule1.pattern = QRegularExpression(QStringLiteral("'[^\\']*'"));
+        stringRule1.format  = stringFormat;
+        m_highlightingRules.append(stringRule1);
+
+        HighlightingRule stringRule2;
+        stringRule2.pattern = QRegularExpression(QStringLiteral("\"[^\\\"]*\""));
+        stringRule2.format  = stringFormat;
+        m_highlightingRules.append(stringRule2);
+
+        // 数字
+        QTextCharFormat numberFormat;
+        numberFormat.setForeground(QColor(255, 140, 0));
+
+        HighlightingRule numberRule;
+        numberRule.pattern = QRegularExpression(QStringLiteral("\\b\\d+\\.?\\d*\\b"));
+        numberRule.format  = numberFormat;
+        m_highlightingRules.append(numberRule);
+    }
+
+    // 处理多行字符串
+    void processMultiLineStrings(const QString& text)
+    {
+        QTextCharFormat stringFormat;
+        stringFormat.setForeground(QColor(0, 128, 0));
+
+        int startIndex = 0;
+        if (previousBlockState() != 1) startIndex = text.indexOf("\"\"\"");
+
+        while (startIndex >= 0) {
+            int endIndex   = text.indexOf("\"\"\"", startIndex + 3);
+            int blockState = 0;
+
+            if (endIndex == -1) {
+                setCurrentBlockState(1);
+                blockState = 1;
+            }
+
+            int commentLength =
+                (endIndex == -1) ? text.length() - startIndex : endIndex - startIndex + 3;
+            setFormat(startIndex, commentLength, stringFormat);
+            startIndex = text.indexOf("\"\"\"", startIndex + commentLength);
+        }
+    }
+
+    // 处理单行注释
+    void processSingleLineComments(const QString& text)
+    {
+        QTextCharFormat commentFormat;
+        commentFormat.setForeground(QColor(128, 128, 128));
+        commentFormat.setFontItalic(true);
+
+        // 查找#号
+        int hashIndex = text.indexOf("#");
+        if (hashIndex >= 0) {
+            // 检查是否在字符串内部
+            bool inString = false;
+            for (int i = 0; i < hashIndex; ++i) {
+                if (text[i] == '"' || text[i] == '\'') {
+                    // 检查是否是转义的引号
+                    if (i > 0 && text[i - 1] == '\\') continue;
+                    inString = !inString;
+                }
+            }
+
+            if (!inString) {
+                setFormat(hashIndex, text.length() - hashIndex, commentFormat);
+            }
+        }
+    }
+
+    QVector<HighlightingRule> m_highlightingRules;
+};
 
 PyEditor::PyEditor(QWidget* parent)
     : QPlainTextEdit(parent)
@@ -46,6 +215,11 @@ PyEditor::~PyEditor()
         changeTimer->stop();
         delete changeTimer;
         changeTimer = nullptr;
+    }
+
+    if (syntaxHighlighter) {
+        delete syntaxHighlighter;
+        syntaxHighlighter = nullptr;
     }
 }
 
@@ -302,6 +476,9 @@ void PyEditor::setupEditor()
     connect(this, &PyEditor::updateRequest, this, &PyEditor::updateLineNumberArea);
     connect(this, &PyEditor::cursorPositionChanged, this, &PyEditor::highlightCurrentLine);
 
+    // 设置语法高亮
+    setupSyntaxHighlighting();
+
     updateLineNumberAreaWidth();
 }
 
@@ -362,4 +539,10 @@ void PyEditor::setupAutoSave()
             qDebug() << "Auto-saved to" << currentFilePath;
         }
     });
+}
+
+void PyEditor::setupSyntaxHighlighting()
+{
+    // 创建语法高亮器实例
+    syntaxHighlighter = new PythonHighlighter(document());
 }

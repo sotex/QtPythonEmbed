@@ -12,10 +12,13 @@
 #include <QThread>
 #include <QMutex>
 #include <QMutexLocker>
+#include <QSyntaxHighlighter>
+#include <QRegularExpression>
 
 class CodeRunner;
 class ConfigManager;
 class LineNumberArea;
+class PythonHighlighter;
 
 class PyEditor : public QPlainTextEdit
 {
@@ -99,11 +102,13 @@ private:
     void updateExtraSelections();
     void setupLineNumberArea();
     void setupAutoSave();
+    void setupSyntaxHighlighting();
 
 private:
     LineNumberArea* lineNumberArea = nullptr;
     CodeRunner* codeRunner = nullptr;
     ConfigManager* configManager = nullptr;
+    PythonHighlighter* syntaxHighlighter = nullptr;
     int currentLine = -1;
     QTimer* changeTimer = nullptr;
     QString currentFilePath;
