@@ -237,6 +237,7 @@ void PyEditor::setCodeRunner(CodeRunner* runner)
         // 连接新的信号
         if (codeRunner) {
             connect(codeRunner, &CodeRunner::lineExecuted, this, &PyEditor::setCurrentLine);
+            connect(this, &PyEditor::breakpointsChanged, codeRunner, &CodeRunner::setBreakpoints);
         }
     }
 }

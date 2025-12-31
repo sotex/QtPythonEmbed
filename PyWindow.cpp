@@ -187,7 +187,6 @@ void PyWindow::connectSignals()
     connect(m_runner, &CodeRunner::executionFinished, this, &PyWindow::onExecutionFinish);
     connect(m_runner, &CodeRunner::outputReceived, this, &PyWindow::appendOutput);
     connect(m_runner, &CodeRunner::errorOccurred, this, &PyWindow::appendError);
-    connect(m_runner, &CodeRunner::lineExecuted, m_codeEditor, &PyEditor::setCurrentLine);
     connect(m_runner, &CodeRunner::debugStateChanged, this, &PyWindow::onDebugStateChanged);
 
     // 调试按钮连接
@@ -198,7 +197,7 @@ void PyWindow::connectSignals()
     connect(m_stepOutButton, &QPushButton::clicked, m_runner, &CodeRunner::stepOut, ct);
 
     // PyEditor连接
-    connect(m_codeEditor, &PyEditor::breakpointsChanged, m_runner, &CodeRunner::setBreakpoints, ct);
+    m_codeEditor->setCodeRunner(m_runner);
 
     // Python管理器连接
     if (m_pythonManager) {
