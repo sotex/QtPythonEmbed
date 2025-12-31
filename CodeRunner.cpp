@@ -49,6 +49,10 @@ void CodeRunner::runCode(const QString& code)
 void CodeRunner::abortExecution()
 {
     m_shouldAbort = true;
+
+    // 唤醒可能正在等待的调试线程
+    QMutexLocker locker(&m_debugMutex);
+    m_debugCondition.wakeAll();
 }
 
 void CodeRunner::setExecutionDelay(int delayMs)
@@ -113,7 +117,7 @@ int CodeRunner::pythonTraceFunction(PyObject* obj, PyFrameObject* frame, int eve
     QMetaObject::invokeMethod(
         g_currentRunner,
         [lineNumber]() { emit g_currentRunner->lineExecuted(lineNumber); },
-        Qt::QueuedConnection);
+        Qt::DirectConnection);
 
     // 检查是否是断点
     if (g_currentRunner->isBreakpoint(lineNumber) && g_currentRunner->m_debugState == Running) {
@@ -121,10 +125,20 @@ int CodeRunner::pythonTraceFunction(PyObject* obj, PyFrameObject* frame, int eve
         g_currentRunner->m_debugState = Paused;
         emit g_currentRunner->debugStateChanged(g_currentRunner->m_debugState);
         g_currentRunner->m_debugCondition.wait(&g_currentRunner->m_debugMutex);
+
+        // 检查是否需要中止
+        if (g_currentRunner->m_shouldAbort) {
+            return 0;
+        }
     }
 
     // 处理调试状态
     QMutexLocker locker(&g_currentRunner->m_debugMutex);
+
+    // 检查是否需要中止
+    if (g_currentRunner->m_shouldAbort) {
+        return 0;
+    }
 
     // 保存当前调试状态
     DebugState currentState = g_currentRunner->m_debugState;
@@ -134,6 +148,12 @@ int CodeRunner::pythonTraceFunction(PyObject* obj, PyFrameObject* frame, int eve
         // 已经暂停，等待调试命令
         emit g_currentRunner->debugStateChanged(g_currentRunner->m_debugState);
         g_currentRunner->m_debugCondition.wait(&g_currentRunner->m_debugMutex);
+
+        // 检查是否需要中止
+        if (g_currentRunner->m_shouldAbort) {
+            return 0;
+        }
+
         // 更新当前状态为用户选择的调试命令
         currentState = g_currentRunner->m_debugState;
     }
@@ -153,6 +173,11 @@ int CodeRunner::pythonTraceFunction(PyObject* obj, PyFrameObject* frame, int eve
             g_currentRunner->m_debugState = Paused;
             emit g_currentRunner->debugStateChanged(g_currentRunner->m_debugState);
             g_currentRunner->m_debugCondition.wait(&g_currentRunner->m_debugMutex);
+
+            // 检查是否需要中止
+            if (g_currentRunner->m_shouldAbort) {
+                return 0;
+            }
         }
     }
     else if (currentState == StepOver) {
@@ -161,6 +186,11 @@ int CodeRunner::pythonTraceFunction(PyObject* obj, PyFrameObject* frame, int eve
             g_currentRunner->m_debugState = Paused;
             emit g_currentRunner->debugStateChanged(g_currentRunner->m_debugState);
             g_currentRunner->m_debugCondition.wait(&g_currentRunner->m_debugMutex);
+
+            // 检查是否需要中止
+            if (g_currentRunner->m_shouldAbort) {
+                return 0;
+            }
         }
         else if (event == PyTrace_CALL) {
             // 函数调用时，跳过函数内部
@@ -173,6 +203,11 @@ int CodeRunner::pythonTraceFunction(PyObject* obj, PyFrameObject* frame, int eve
             g_currentRunner->m_debugState = Paused;
             emit g_currentRunner->debugStateChanged(g_currentRunner->m_debugState);
             g_currentRunner->m_debugCondition.wait(&g_currentRunner->m_debugMutex);
+
+            // 检查是否需要中止
+            if (g_currentRunner->m_shouldAbort) {
+                return 0;
+            }
         }
     }
     // Running状态不需要特殊处理，直接继续执行
