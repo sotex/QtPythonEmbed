@@ -77,6 +77,7 @@ void PyWindow::initializeUI()
 
     // 创建工具栏
     QToolBar* toolbar = addToolBar("Main");
+    toolbar->setObjectName("mainToolBar");
     toolbar->setMovable(false);
 
     // 创建按钮
@@ -103,6 +104,7 @@ void PyWindow::initializeUI()
 
     // 创建调试工具栏
     QToolBar* debugToolbar = addToolBar("Debug");
+    debugToolbar->setObjectName("debugToolBar");
     debugToolbar->setMovable(false);
 
     // 创建调试按钮
