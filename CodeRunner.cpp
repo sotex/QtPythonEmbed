@@ -111,16 +111,33 @@ int CodeRunner::pythonTraceFunction(PyObject* obj, PyFrameObject* frame, int eve
         return 0;
     }
 
+    // 获取当前执行的文件名
+    PyObject* filename   = frame->f_code->co_filename;
+    bool      isUserCode = false;
+
+    if (filename && PyUnicode_Check(filename)) {
+        const char* filenameStr = PyUnicode_AsUTF8(filename);
+        // 过滤：只处理用户代码，通常通过exec或eval执行的代码文件名为"<string>"或"<module>"
+        QString filenameQStr = QString::fromUtf8(filenameStr);
+        if (filenameQStr == "<string>" || filenameQStr == "<module>") {
+            isUserCode = true;
+        }
+    }
+
     int lineNumber = PyFrame_GetLineNumber(frame);
 
-    // 使用Qt的invokeMethod在主线程中发出信号
-    QMetaObject::invokeMethod(
-        g_currentRunner,
-        [lineNumber]() { emit g_currentRunner->lineExecuted(lineNumber); },
-        Qt::DirectConnection);
+    // 只在执行用户代码时发送lineExecuted信号
+    if (isUserCode) {
+        // 使用Qt的invokeMethod在主线程中发出信号
+        QMetaObject::invokeMethod(
+            g_currentRunner,
+            [lineNumber]() { emit g_currentRunner->lineExecuted(lineNumber); },
+            Qt::DirectConnection);
+    }
 
-    // 检查是否是断点
-    if (g_currentRunner->isBreakpoint(lineNumber) && g_currentRunner->m_debugState == Running) {
+    // 检查是否是断点，只在执行用户代码时检查
+    if (isUserCode && g_currentRunner->isBreakpoint(lineNumber) &&
+        g_currentRunner->m_debugState == Running) {
         QMutexLocker locker(&g_currentRunner->m_debugMutex);
         g_currentRunner->m_debugState = Paused;
         emit g_currentRunner->debugStateChanged(g_currentRunner->m_debugState);
