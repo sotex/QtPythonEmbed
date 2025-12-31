@@ -10,6 +10,7 @@
 #include <QFileInfo>
 #include <QFont>
 #include <QKeyEvent>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QPlainTextEdit>
 #include <QSettings>
@@ -266,10 +267,20 @@ void PyEditor::lineNumberAreaPaintEvent(QPaintEvent* event)
 
     while (block.isValid() && top <= event->rect().bottom()) {
         if (block.isVisible() && bottom >= event->rect().top()) {
-            QString number = QString::number(blockNumber + 1);
+            int     currentLineNumber = blockNumber + 1;
+            QString number            = QString::number(currentLineNumber);
+
+            // 绘制断点
+            if (breakpoints.contains(currentLineNumber)) {
+                painter.setPen(QColor(Qt::red));
+                painter.setBrush(QColor(Qt::red));
+                int x = 5;
+                int y = top + fontMetrics().height() / 2 - 4;
+                painter.drawEllipse(x, y, 8, 8);
+            }
 
             // 设置当前执行行颜色
-            if (blockNumber + 1 == currentLine) {
+            if (currentLineNumber == currentLine) {
                 painter.setPen(QColor(Qt::blue));
                 painter.setFont(
                     QFont(painter.font().family(), painter.font().pointSize(), QFont::Bold));
@@ -280,8 +291,12 @@ void PyEditor::lineNumberAreaPaintEvent(QPaintEvent* event)
                     QFont(painter.font().family(), painter.font().pointSize(), QFont::Normal));
             }
 
-            painter.drawText(
-                0, top, lineNumberArea->width(), fontMetrics().height(), Qt::AlignRight, number);
+            painter.drawText(15,
+                             top,
+                             lineNumberArea->width() - 15,
+                             fontMetrics().height(),
+                             Qt::AlignRight,
+                             number);
         }
 
         block  = block.next();
@@ -290,6 +305,18 @@ void PyEditor::lineNumberAreaPaintEvent(QPaintEvent* event)
         ++blockNumber;
     }
 }
+
+
+void PyEditor::lineNumberAreaMousePressEvent(const QPoint& pos)
+{
+    // 计算点击位置对应的行号
+    QTextCursor cursor     = cursorForPosition(pos);
+    int         lineNumber = cursor.blockNumber() + 1;
+
+    // 切换断点
+    toggleBreakpoint(lineNumber);
+}
+
 
 int PyEditor::lineNumberAreaWidth() const
 {
@@ -300,7 +327,8 @@ int PyEditor::lineNumberAreaWidth() const
         ++digits;
     }
 
-    int space = 3 + fontMetrics().horizontalAdvance(QLatin1Char('9')) * digits;
+    // 增加断点符号占用的空间（15像素）
+    int space = 15 + 3 + fontMetrics().horizontalAdvance(QLatin1Char('9')) * digits;
     return space;
 }
 
@@ -545,4 +573,32 @@ void PyEditor::setupSyntaxHighlighting()
 {
     // 创建语法高亮器实例
     syntaxHighlighter = new PythonHighlighter(document());
+}
+
+void PyEditor::toggleBreakpoint(int lineNumber)
+{
+    if (breakpoints.contains(lineNumber)) {
+        breakpoints.remove(lineNumber);
+        emit breakpointChanged(lineNumber, false);
+    }
+    else {
+        breakpoints.insert(lineNumber);
+        emit breakpointChanged(lineNumber, true);
+    }
+    emit breakpointsChanged(breakpoints);
+    // 更新行号区域
+    update();
+    updateLineNumberAreaWidth();
+}
+
+int PyEditor::lineNumberAtPosition(const QPoint& pos) const
+{
+    QTextCursor cursor = cursorForPosition(pos);
+    return cursor.blockNumber() + 1;
+}
+
+
+void PyEditor::mousePressEvent(QMouseEvent* event)
+{
+    QPlainTextEdit::mousePressEvent(event);
 }

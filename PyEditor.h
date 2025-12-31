@@ -1,19 +1,19 @@
 #pragma once
 
-#include <QPlainTextEdit>
-#include <QPaintEvent>
-#include <QResizeEvent>
-#include <QWidget>
-#include <QTimer>
-#include <QFile>
-#include <QTextStream>
 #include <QDebug>
-#include <QSettings>
-#include <QThread>
+#include <QFile>
 #include <QMutex>
 #include <QMutexLocker>
-#include <QSyntaxHighlighter>
+#include <QPaintEvent>
+#include <QPlainTextEdit>
 #include <QRegularExpression>
+#include <QResizeEvent>
+#include <QSettings>
+#include <QSyntaxHighlighter>
+#include <QTextStream>
+#include <QThread>
+#include <QTimer>
+#include <QWidget>
 
 class CodeRunner;
 class ConfigManager;
@@ -52,6 +52,11 @@ public:
     void lineNumberAreaPaintEvent(QPaintEvent* event);
 
     /**
+     * @brief 行号区域鼠标点击事件
+     */
+    void lineNumberAreaMousePressEvent(const QPoint& pos);
+
+    /**
      * @brief 计算行号区域宽度
      * @return int 行号区域像素宽度
      */
@@ -87,6 +92,16 @@ signals:
      */
     void currentLineChanged(int lineNumber);
 
+    /**
+     * @brief 断点变化信号
+     */
+    void breakpointChanged(int lineNumber, bool isSet);
+
+    /**
+     * @brief 断点列表变化信号
+     */
+    void breakpointsChanged(const QSet<int>& breakpoints);
+
 protected:
     void resizeEvent(QResizeEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
@@ -103,34 +118,42 @@ private:
     void setupLineNumberArea();
     void setupAutoSave();
     void setupSyntaxHighlighting();
+    void toggleBreakpoint(int lineNumber);
+    int  lineNumberAtPosition(const QPoint& pos) const;
+
+protected:
+    void mousePressEvent(QMouseEvent* event) override;
 
 private:
-    LineNumberArea* lineNumberArea = nullptr;
-    CodeRunner* codeRunner = nullptr;
-    ConfigManager* configManager = nullptr;
+    LineNumberArea*    lineNumberArea    = nullptr;
+    CodeRunner*        codeRunner        = nullptr;
+    ConfigManager*     configManager     = nullptr;
     PythonHighlighter* syntaxHighlighter = nullptr;
-    int currentLine = -1;
-    QTimer* changeTimer = nullptr;
-    QString currentFilePath;
+    int                currentLine       = -1;
+    QTimer*            changeTimer       = nullptr;
+    QString            currentFilePath;
+    QSet<int>          breakpoints;   // 断点行号集合
 };
 
-class LineNumberArea : public QWidget {
+class LineNumberArea : public QWidget
+{
 public:
     explicit LineNumberArea(PyEditor* editor)
         : QWidget(editor)
         , codeEditor(editor)
-    {
-    }
+    {}
 
-    QSize sizeHint() const override
-    {
-        return QSize(codeEditor->lineNumberAreaWidth(), 0);
-    }
+    QSize sizeHint() const override { return QSize(codeEditor->lineNumberAreaWidth(), 0); }
 
 protected:
-    void paintEvent(QPaintEvent* event) override
+    void paintEvent(QPaintEvent* event) override { codeEditor->lineNumberAreaPaintEvent(event); }
+
+    void mousePressEvent(QMouseEvent* event) override
     {
-        codeEditor->lineNumberAreaPaintEvent(event);
+        // 捕获鼠标点击事件，转发给PyEditor
+        QPoint localPos  = event->pos();
+        QPoint editorPos = mapToParent(localPos);
+        codeEditor->lineNumberAreaMousePressEvent(editorPos);
     }
 
 private:

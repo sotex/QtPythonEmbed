@@ -1,7 +1,10 @@
 #pragma once
 
+#include <QMutex>
 #include <QObject>
+#include <QSet>
 #include <QString>
+#include <QWaitCondition>
 
 #include <Python.h>
 
@@ -20,6 +23,19 @@ class CodeRunner : public QObject
     Q_OBJECT
 
 public:
+    /**
+     * @brief 调试状态枚举
+     */
+    enum DebugState
+    {
+        Running,    // 正常运行
+        Paused,     // 暂停
+        StepInto,   // 逐语句
+        StepOver,   // 逐过程
+        StepOut     // 跳出
+    };
+    Q_ENUM(DebugState)
+
     /**
      * @brief 构造函数
      * @param parent 父对象
@@ -67,6 +83,12 @@ signals:
      */
     void progressUpdated(int current, int total);
 
+    /**
+     * @brief 调试状态变化信号
+     * @param state 新的调试状态
+     */
+    void debugStateChanged(int state);
+
 public slots:
     /**
      * @brief 运行Python代码
@@ -84,6 +106,32 @@ public slots:
      * @param delayMs 延迟毫秒数
      */
     void setExecutionDelay(int delayMs);
+
+    /**
+     * @brief 继续执行
+     */
+    void continueExecution();
+
+    /**
+     * @brief 逐语句执行
+     */
+    void stepInto();
+
+    /**
+     * @brief 逐过程执行
+     */
+    void stepOver();
+
+    /**
+     * @brief 跳出当前函数
+     */
+    void stepOut();
+
+    /**
+     * @brief 设置断点列表
+     * @param breakpoints 断点行号集合
+     */
+    void setBreakpoints(const QSet<int>& breakpoints);
 
 private:
     /**
@@ -122,9 +170,21 @@ private:
      */
     void handlePythonException(void* exc);
 
+    /**
+     * @brief 检查当前行是否是断点
+     * @param lineNumber 行号
+     * @return bool 是否是断点
+     */
+    bool isBreakpoint(int lineNumber) const;
+
 private:
-    bool m_isExecuting    = false;
-    bool m_shouldAbort    = false;
-    int  m_executionDelay = 0;
-    int  m_currentLine    = -1;
+    bool           m_isExecuting    = false;
+    bool           m_shouldAbort    = false;
+    int            m_executionDelay = 0;
+    int            m_currentLine    = -1;
+    DebugState     m_debugState     = Running;
+    QSet<int>      m_breakpoints;     // 断点行号集合
+    int            m_callDepth = 0;   // 当前调用深度，用于逐过程和跳出
+    QMutex         m_debugMutex;
+    QWaitCondition m_debugCondition;
 };

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "CodeRunner.h"
+
 #include <QMainWindow>
 #include <QPushButton>
 #include <QSettings>
@@ -76,6 +78,12 @@ private slots:
     void onPythonInitialized();
 
     /**
+     * @brief 调试状态变化处理
+     * @param state 新的调试状态
+     */
+    void onDebugStateChanged(int state);
+
+    /**
      * @brief 显示设置对话框
      */
     void showSettings();
@@ -149,6 +157,12 @@ private:
     QPushButton* m_clearButton    = nullptr;
     QPushButton* m_settingsButton = nullptr;
     QPushButton* m_saveButton     = nullptr;
+
+    // 调试按钮
+    QPushButton* m_continueButton = nullptr;
+    QPushButton* m_stepIntoButton = nullptr;
+    QPushButton* m_stepOverButton = nullptr;
+    QPushButton* m_stepOutButton  = nullptr;
 
     // 核心组件
     CodeRunner*               m_runner        = nullptr;
